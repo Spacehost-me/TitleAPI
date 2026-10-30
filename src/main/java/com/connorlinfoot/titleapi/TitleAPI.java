@@ -2,8 +2,6 @@ package com.connorlinfoot.titleapi;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.Server;
-import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -11,8 +9,6 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.util.Optional;
 import java.util.logging.Level;
 
@@ -53,7 +49,7 @@ public class TitleAPI extends JavaPlugin implements Listener {
             return;
         }
 
-        internalApi.sendTitle(player, title, subtitle, fadeIn, stay, fadeOut);
+        internalApi.sendTitle(player, format(player, titleSendEvent.getTitle()), format(player, titleSendEvent.getSubtitle()), fadeIn, stay, fadeOut);
     }
 
     public static void clearTitle(Player player) {
@@ -73,7 +69,27 @@ public class TitleAPI extends JavaPlugin implements Listener {
         }
 
         InternalTitleAPI internalApi = instance.getInternalApi().orElseThrow(() -> new RuntimeException("No internal API, Unsupported version?"));
-        internalApi.sendTabTitle(player, header, footer);
+
+        TabTitleSendEvent tabTitleSendEvent = new TabTitleSendEvent(player, header == null ? "" : header, footer == null ? "" : footer);
+        Bukkit.getPluginManager().callEvent(tabTitleSendEvent);
+        if (tabTitleSendEvent.isCancelled()) {
+            return;
+        }
+
+        internalApi.sendTabTitle(player, format(player, tabTitleSendEvent.getHeader()), format(player, tabTitleSendEvent.getFooter()));
+    }
+
+    /**
+     * Applies the formatting the API is expected to do regardless of server version: '&' colour
+     * codes and the %player% placeholder. This used to live in the 1.8 - 1.12 reflection
+     * implementation only, which meant neither worked on newer servers.
+     */
+    private static String format(Player player, String message) {
+        if (message == null) {
+            return null;
+        }
+
+        return ChatColor.translateAlternateColorCodes('&', message).replace("%player%", player.getDisplayName());
     }
 
     private InternalTitleAPI internalApi;
@@ -85,11 +101,20 @@ public class TitleAPI extends JavaPlugin implements Listener {
         saveConfig();
 
         this.internalApi = InternalAPIMapping.create();
+        if (this.internalApi == null) {
+            getLogger().warning("Minecraft " + MinecraftVersion.get() + " is not supported, titles will not be sent.");
+        }
+
         Bukkit.getPluginManager().registerEvents(this, this);
 
         if (getConfig().getBoolean("Check for Updates")) {
-            CLUpdate updater = new CLUpdate(this);
-            Bukkit.getPluginManager().registerEvents(updater, this);
+            try {
+                CLUpdate updater = new CLUpdate(this);
+                Bukkit.getPluginManager().registerEvents(updater, this);
+            } catch (Throwable t) {
+                // The update check is optional, never let it stop the plugin from enabling
+                getLogger().log(Level.WARNING, "Failed to start the update check", t);
+            }
         }
     }
 

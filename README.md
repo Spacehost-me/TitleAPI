@@ -4,12 +4,18 @@ TitleAPI
 [![Java CI with Maven](https://github.com/ConnorLinfoot/TitleAPI/actions/workflows/maven.yml/badge.svg)](https://github.com/ConnorLinfoot/TitleAPI/actions/workflows/maven.yml)
 [![](https://jitpack.io/v/ConnorLinfoot/TitleAPI.svg)](https://jitpack.io/#ConnorLinfoot/TitleAPI)
 
-Simple to use library for sending Titles to players in Bukkit, supporting 1.8 - 1.17.
+Simple to use library for sending Titles to players in Bukkit, supporting 1.8 - 1.26.3.
 
 ## Use Bukkit APIs
 
 While this library does work with even the latest version of Bukkit, it is heavily recommended when possible to use the
 built-in APIs that have existed in Bukkit for over 5 years now.
+
+## Formatting
+
+Titles, subtitles and tab list headers/footers are passed through `&` colour code translation and
+have `%player%` replaced with the player's display name, on every supported version. Before 1.9.0
+this only happened on 1.8 - 1.12.
 
 ## Maven
 
@@ -28,7 +34,7 @@ projects.
 <dependency>
     <groupId>com.github.ConnorLinfoot</groupId>
     <artifactId>TitleAPI</artifactId>
-    <version>1.8.1</version>
+    <version>1.9.0</version>
 </dependency>
 </dependencies>    
 ```

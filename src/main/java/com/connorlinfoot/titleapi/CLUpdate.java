@@ -7,15 +7,14 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
-import org.json.simple.parser.ParseException;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 class CLUpdate implements Listener {
     private CLUpdate.UpdateResult result = CLUpdate.UpdateResult.DISABLED;
@@ -46,28 +45,85 @@ class CLUpdate implements Listener {
             return;
         }
 
-        JSONParser jsonParser = new JSONParser();
-        try {
-            JSONObject obj = (JSONObject) jsonParser.parse(data);
-            if (obj.get("version") != null) {
-                String newestVersion = (String) obj.get("version");
-                String currentVersion = plugin.getDescription().getVersion().replaceAll("-SNAPSHOT-", "."); // Changes 4.0.0-SNAPSHOT-4 to 4.0.0.4
-                if (Integer.parseInt(newestVersion.replace(".", "")) > Integer.parseInt(currentVersion.replace(".", ""))) {
-                    result = UpdateResult.UPDATE_AVAILABLE;
-                    version = (String) obj.get("version");
-                } else {
-                    result = UpdateResult.NO_UPDATE;
-                }
-                if (obj.containsKey("message")) {
-                    this.message = ChatColor.translateAlternateColorCodes('&', (String) obj.get("message"));
-                    Bukkit.getConsoleSender().sendMessage(ChatColor.translateAlternateColorCodes('&', (String) obj.get("message")));
-                }
+        String newestVersion = readString(data, "version");
+        if (newestVersion != null) {
+            String currentVersion = plugin.getDescription().getVersion().replaceAll("-SNAPSHOT-", "."); // Changes 4.0.0-SNAPSHOT-4 to 4.0.0.4
+            if (isNewer(newestVersion, currentVersion)) {
+                result = UpdateResult.UPDATE_AVAILABLE;
+                version = newestVersion;
+            } else {
+                result = UpdateResult.NO_UPDATE;
             }
-        } catch (ParseException e) {
-            return;
+
+            String remoteMessage = readString(data, "message");
+            if (remoteMessage != null) {
+                this.message = ChatColor.translateAlternateColorCodes('&', remoteMessage);
+                Bukkit.getConsoleSender().sendMessage(this.message);
+            }
         }
 
         Bukkit.getScheduler().runTask(plugin, this::handleResult);
+    }
+
+    private static boolean isNewer(String newestVersion, String currentVersion) {
+        try {
+            return Integer.parseInt(newestVersion.replace(".", "")) > Integer.parseInt(currentVersion.replace(".", ""));
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Reads a single string value out of the response. The response only ever holds a flat object
+     * of strings, so this avoids depending on a JSON library being on the server's classpath -
+     * json-simple ships with some server versions and not others.
+     */
+    private static String readString(String json, String key) {
+        Matcher matcher = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"").matcher(json);
+        return matcher.find() ? unescape(matcher.group(1)) : null;
+    }
+
+    private static String unescape(String value) {
+        StringBuilder unescaped = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char current = value.charAt(i);
+            if (current != '\\' || i + 1 >= value.length()) {
+                unescaped.append(current);
+                continue;
+            }
+
+            char escaped = value.charAt(++i);
+            switch (escaped) {
+                case 'n':
+                    unescaped.append('\n');
+                    break;
+                case 'r':
+                    unescaped.append('\r');
+                    break;
+                case 't':
+                    unescaped.append('\t');
+                    break;
+                case 'b':
+                    unescaped.append('\b');
+                    break;
+                case 'f':
+                    unescaped.append('\f');
+                    break;
+                case 'u':
+                    if (i + 4 < value.length()) {
+                        try {
+                            unescaped.append((char) Integer.parseInt(value.substring(i + 1, i + 5), 16));
+                            i += 4;
+                        } catch (NumberFormatException e) {
+                            unescaped.append(escaped);
+                        }
+                    }
+                    break;
+                default:
+                    unescaped.append(escaped);
+            }
+        }
+        return unescaped.toString();
     }
 
     public String getVersion() {
